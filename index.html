@@ -92,6 +92,7 @@ footer{color:var(--muted);font-size:13px}
   <div class="controls">
     <label class="ctl" for="changedOnly"><input type="checkbox" id="changedOnly"> Only players who changed</label>
     <label class="ctl" for="potOnly"><input type="checkbox" id="potOnly"> Only potential changes</label>
+    <label class="ctl" for="showDef"><input type="checkbox" id="showDef"> Show defensive changes</label>
     <label class="ctl" for="detailed"><input type="checkbox" id="detailed"> Detailed view (sim by sim)</label>
   </div>
   <div class="summary" id="summary"></div>
@@ -113,6 +114,8 @@ const DATA = {"asOf": "2055-05-03", "liveFrom": "2055-04-26", "orgs": {"20": {"n
   const put=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
   const PIT=new Set(["SP","RP","CL","P"]);
   const isSplit=r=>/ vs [LR]( |$)/.test(r);
+  // position ratings and their potentials, plus fielding (catcher, infield, outfield, double play)
+  const isDef=r=>/( defense| DF Potential)$|^(Catcher|Infield|Outfield) |^Turn Double Play$/.test(r);
   const loaded=new Set(DATA.players.map(p=>p.org));
   const orgSel=$("org"), winSel=$("win");
   Object.entries(DATA.orgs).sort((a,b)=>a[1].name.localeCompare(b[1].name)).forEach(([id,o])=>{
@@ -123,18 +126,20 @@ const DATA = {"asOf": "2055-05-03", "liveFrom": "2055-04-26", "orgs": {"20": {"n
   $("changedOnly").checked=get("pd_changed")!=="0";
   $("potOnly").checked=get("pd_pot")==="1";
   $("detailed").checked=get("pd_det")==="1";
+  $("showDef").checked=get("pd_def")!=="0";
   const li=c=>`<li class="${c.up?"up":"down"}${c.pot?" pot":""}${isSplit(c.r)?" split":""}"><span class="ar" aria-hidden="true">${c.up?"▲":"▼"}</span><span class="tx">${esc(c.r)} ${c.up?"increased":"decreased"} from <span class="num">${c.from}</span> to <span class="num">${c.to}</span></span></li>`;
   function render(){
     const org=orgSel.value, w=DATA.windows.find(x=>x.key===winSel.value)||DATA.windows[0];
-    const only=$("changedOnly").checked, potOnly=$("potOnly").checked, det=$("detailed").checked;
+    const only=$("changedOnly").checked, potOnly=$("potOnly").checked, det=$("detailed").checked, showDef=$("showDef").checked;
     $("cols").classList.toggle("pot-only",potOnly);
     const list=DATA.players.filter(p=>p.org===org).sort((a,b)=>a.rank-b.rank);
     $("sub").textContent=`${DATA.orgs[org].name} · ${list.length?list.length+" prospects (BNN list)":"no prospect list yet"} · game date ${fmt(DATA.asOf)}`;
     const keep=c=>!potOnly||c.pot;
+    const defOk=c=>showDef||!isDef(c.r);
     let nUp=0,nDown=0,nPl=0; const out={P:[],B:[]};
     list.forEach(p=>{
-      const ch=(w.changes[p.id]||[]), vis=ch.filter(keep);
-      const evs=det?(DATA.events[p.id]||[]).filter(e=>e.d>w.start&&(w.key!=="last"||e.src==="l")).map(e=>({...e,c:e.c.filter(keep)})).filter(e=>e.c.length).sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:(a.src==="l"?-1:1)):[];
+      const ch=(w.changes[p.id]||[]).filter(defOk), vis=ch.filter(keep);
+      const evs=det?(DATA.events[p.id]||[]).filter(e=>e.d>w.start&&(w.key!=="last"||e.src==="l")).map(e=>({...e,c:e.c.filter(c=>keep(c)&&defOk(c))})).filter(e=>e.c.length).sort((a,b)=>a.d<b.d?1:a.d>b.d?-1:(a.src==="l"?-1:1)):[];
       const up=vis.filter(c=>c.up).length, dn=vis.length-up;
       const has=det?evs.length:vis.length;
       if(has){nPl++;nUp+=up;nDown+=dn}
@@ -153,9 +158,9 @@ const DATA = {"asOf": "2055-05-03", "liveFrom": "2055-04-26", "orgs": {"20": {"n
     const note=$("note");
     if(w.start<DATA.liveFrom&&list.length){note.hidden=false;note.textContent=`Changes before ${fmt(DATA.liveFrom)} come from the Stats+ ratings history, which can be off by a point for some players. Changes since then come from the nightly live ratings pulls.`}else note.hidden=true;
     $("foot").textContent=`Highlighted POT lines are potential changes. Live ratings since ${fmt(DATA.liveFrom)}; earlier periods use the Stats+ history, with each source compared only to itself. ${loaded.size} of ${Object.keys(DATA.orgs).length} organizations loaded.`;
-    put("pd_org",org);put("pd_win",winSel.value);put("pd_changed",only?"1":"0");put("pd_pot",potOnly?"1":"0");put("pd_det",det?"1":"0");
+    put("pd_org",org);put("pd_win",winSel.value);put("pd_changed",only?"1":"0");put("pd_pot",potOnly?"1":"0");put("pd_det",det?"1":"0");put("pd_def",showDef?"1":"0");
   }
-  [orgSel,winSel,$("changedOnly"),$("potOnly"),$("detailed")].forEach(el=>el.addEventListener("change",render));
+  [orgSel,winSel,$("changedOnly"),$("potOnly"),$("showDef"),$("detailed")].forEach(el=>el.addEventListener("change",render));
   render();
 })();
 </script>
